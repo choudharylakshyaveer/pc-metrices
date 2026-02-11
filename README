@@ -1,0 +1,220 @@
+# pc-metrices
+# PC Metrics – Help & Documentation
+
+This document explains how to run, configure, and use the **PC Metrics system**, which collects live CPU & RAM metrics from a Windows machine, publishes them to Kafka, and exposes them via a REST API.
+
+---
+
+## 🧩 Architecture Overview
+
+```
+[ Windows Machine ]
+        |
+        |  (CPU, RAM metrics every 1s)
+        v
+[ pc-metrics-producer ]
+        |
+        |  Kafka Topic: system-metrics
+        v
+[ Kafka Cluster (3 brokers) ]
+        |
+        v
+[ pc-metrics-consumer ]
+        |
+        v
+[ REST API ]  -->  /api/metrics/live
+```
+
+---
+
+## 📦 Components
+
+### 1️⃣ pc-metrics-producer
+
+* Collects **live CPU and memory metrics**
+* Publishes metrics to Kafka topic
+* Runs as a Spring Boot application
+
+### 2️⃣ pc-metrics-consumer
+
+* Consumes metrics from Kafka
+* Stores latest metrics in memory
+* Exposes REST API for live metrics
+
+### 3️⃣ Kafka Cluster
+
+* 3 Kafka brokers
+* 1 Zookeeper instance
+* Runs via Docker Compose
+
+---
+
+## 🐳 Kafka – Docker Setup
+
+### Start Kafka Cluster
+
+```bash
+docker compose up -d
+```
+
+### Kafka Brokers
+
+| Broker  | External Port |
+| ------- | ------------- |
+| kafka-1 | 9092          |
+| kafka-2 | 9093          |
+| kafka-3 | 9094          |
+
+### Topic Used
+
+* **system-metrics**
+
+Create topic manually (optional):
+
+```bash
+docker exec kafka-1 /usr/bin/kafka-topics \
+  --create \
+  --topic system-metrics \
+  --bootstrap-server kafka-1:29092 \
+  --replication-factor 1 \
+  --partitions 3
+```
+
+---
+
+## ⚙️ Configuration
+
+### Producer – `application.yml`
+
+```yaml
+spring:
+  application:
+    name: pc-metrics-producer
+
+  kafka:
+    bootstrap-servers: localhost:9092,localhost:9093,localhost:9094
+
+metrics:
+  topic: system-metrics
+  publish-rate-ms: 1000
+```
+
+### Consumer – `application.yml`
+
+```yaml
+spring:
+  application:
+    name: pc-metrics-consumer
+
+  kafka:
+    bootstrap-servers: localhost:9092,localhost:9093,localhost:9094
+
+server:
+  port: 8081
+```
+
+---
+
+## ▶️ Running the Applications
+
+### 1️⃣ Start Kafka
+
+```bash
+docker compose up -d
+```
+
+### 2️⃣ Start Producer
+
+```bash
+cd pc-metrics-producer
+mvn spring-boot:run
+```
+
+### 3️⃣ Start Consumer
+
+```bash
+cd pc-metrics-consumer
+mvn spring-boot:run
+```
+
+---
+
+## 🌐 REST API
+
+### Live Metrics Endpoint
+
+```
+GET http://localhost:8081/api/metrics/live
+```
+
+### Sample Response
+
+```json
+{
+  "cpuUsage": "15.37 %",
+  "totalMemory": "63.11 GB",
+  "usedMemory": "23.55 GB",
+  "availableMemory": "39.56 GB",
+  "timestamp": "2026-02-11 17:45:24"
+}
+```
+
+### HTTP Status Codes
+
+| Code | Meaning                 |
+| ---- | ----------------------- |
+| 200  | Metrics available       |
+| 204  | No metrics received yet |
+
+---
+
+## 🧠 Design Decisions
+
+* Kafka messages use **raw values** (bytes, epoch time)
+* REST API returns **human-readable formatted values**
+* No deprecated Kafka or Jackson APIs used
+* DTO-based formatting for clean separation
+
+---
+
+## 🧪 Troubleshooting
+
+### ❌ Kafka connection error
+
+```
+Connection to node -2 could not be established
+```
+
+✔ Ensure Docker Kafka is running
+✔ Verify `bootstrap-servers` ports match Docker compose
+
+---
+
+### ❌ No metrics in API
+
+* Ensure producer is running
+* Check consumer logs for Kafka consumption
+* Call API after a few seconds
+
+---
+
+## 🚀 Possible Enhancements
+
+* Server-Sent Events (SSE) for real-time streaming
+* WebSocket support
+* RAM usage percentage
+* Metrics persistence (DB / Redis)
+* Prometheus / Grafana integration
+
+---
+
+## 📌 Summary
+
+This system provides:
+
+* Live system monitoring
+* Kafka-based decoupling
+* Clean REST API for dashboards
+* Docker-based local setup
+
+You now have a **production-style metrics pipeline** 🎉
